@@ -3,11 +3,17 @@ import os, glob, json
 
 # Kiszedi minden új beteg tesztadatait, azonosítóit és hozzáadja a bicams.xlsx excelhez
 # Az új betegeknek a script mappájában kell lenniük
-
-bicams_df = pd.read_excel('/Users/szabi/Desktop/bicams/bicams.xlsx', dtype='object')
-bicams_df.pop('Unnamed: 0')
-identifiers = [str(i) for i in bicams_df["Identifier"]]
 path = os.getcwd()
+if not os.path.exists('bicams.xlsx'):
+    bicams_df = pd.DataFrame(columns=['Identifier', 'Name'])
+
+try:
+    bicams_df = pd.read_excel('/Users/szabi/Desktop/bicams/bicams.xlsx', dtype='object')
+    bicams_df.pop('Unnamed: 0')
+except FileNotFoundError:
+    pass
+
+identifiers = [str(i) for i in bicams_df["Identifier"]]
 patient_dirs = [ name for name in os.listdir(path) if os.path.isdir(os.path.join(path, name)) ]
 tests = ['CVLT-II', 'RVP', 'RT', 'SDMT']
 for dir in patient_dirs:
