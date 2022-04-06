@@ -1,11 +1,10 @@
 import pandas as pd
-import os, glob, json
+import os, glob, re, json
 
-# Kiszedi minden új beteg tesztadatait, azonosítóit és hozzáadja a bicams.xlsx excelhez
-# Az új betegeknek a script mappájában kell lenniük
+
 path = os.getcwd()
 if not os.path.exists('bicams.xlsx'):
-    bicams_df = pd.DataFrame(columns=['Identifier', 'Name'])
+    bicams_df = pd.DataFrame(columns=['Identifier', 'Name', 'Age', 'DateOfBirth', 'Male', 'StudentYears', 'CVLT_fin', 'RVP_avg', 'RT_avg', 'SDMT', 'TestDate'])
 
 try:
     bicams_df = pd.read_excel('/Users/szabi/Desktop/bicams/bicams.xlsx', dtype='object')
@@ -15,9 +14,10 @@ except FileNotFoundError:
 
 identifiers = [str(i) for i in bicams_df["Identifier"]]
 patient_dirs = [ name for name in os.listdir(path) if os.path.isdir(os.path.join(path, name)) ]
-tests = ['CVLT-II', 'RVP', 'RT', 'SDMT']
-for dir in patient_dirs:
-    patient = pd.read_json(f"{dir}/info.json", orient="index").T
+# tests = ['CVLT-II', 'RVP', 'RT', 'SDMT']
+for pat_dir in patient_dirs:
+    tests = os.listdir(f"{pat_dir}/Tests")
+    patient = pd.read_json(f"{pat_dir}/info.json", orient="index").T
     ident = patient["Identifier"][0]
     name = patient["Name"][0]
     dob = patient['DateOfBirth'][0]
@@ -25,52 +25,38 @@ for dir in patient_dirs:
     stud_yrs = patient['StudentYears'][0]
     male = patient['Male'][0]
     if not ident in identifiers:
-        for test in tests:
-            test_data = glob.glob(f"{dir}/Tests/{test}/1/*.json")
-            if test_data:   # if it's not an empty list
-                for test_fil in test_data:
-                    # print(test_fil)
-                    # data = pd.read_json(test_fil, lines=True, orient="index")
-                    with open(test_fil) as jsonFile:
-                        jsonObject = json.load(jsonFile)
-                        jsonObject["Identifier"] = ident        # adds Identifier to patient json (not to testData.json!)
-                    # print(jsonObject["PatientId"])
-                    # print(jsonObject["Identifier"])
-                    # df = df.append(jsonObject, ignore_index=True)
-                    # print(jsonObject)
-                    if test == 'CVLT-II':
-                        cvlt_score = jsonObject['FinalScore']
-                        p_id = jsonObject['Identifier']
-                        test_dt = jsonObject['CreateDate']
-                        # print(f"CVLT_fin: {cvlt_score}, {p_id}")
-                        # cvlt = {'CVLT_fin':[cvlt_score], 'Identifier':p_id}
-                        # cvlt_df = pd.DataFrame(data=[cvlt_score], index=[p_id], columns=['CVLT_fin'])
-                        # appendix = appendix.append({'Identifier':p_id, 'CVLT_fin':cvlt_score}, ignore_index=True)
-                    elif test == 'RVP':
-                        rvp_res = jsonObject['Results']
-                        p_id = jsonObject['Identifier']
-                        if rvp_res:
-                            rvp_score = sum(rvp_res)/len(rvp_res)
-                            # print(f"RVP_avg: {rvp_score}, {p_id}")
-                            # rvp = {'RVP_avg':[rvp_score], 'Identifier':p_id}
-                            # rvp_df = pd.DataFrame(data=[rvp_score], index=[p_id], columns=['RVP_avg'])
-                            # appendix = appendix.append({'Identifier':p_id, 'RVP_avg':rvp_score}, ignore_index=True)
-                    elif test == 'RT':
-                        rt_res = jsonObject['Results']
-                        p_id = jsonObject['Identifier']
-                        if rt_res:
-                            rt_score = sum(rt_res)/len(rt_res)
-                            # print(f"RT_avg: {rt_score}, {p_id}")
-                            # rt = {'RT_avg':[rt_score], 'Identifier':p_id}
-                            # rt_df = pd.DataFrame(data=[rt_score], index=[p_id], columns=['RT_avg'])
-                            # appendix = appendix.append({'Identifier':p_id, 'RT_avg':rt_score}, ignore_index=True)
+        test_results = []
+        for test_name in tests:
+            test_files = os.listdir(f'{pat_dir}/Tests/{test_name}/1')[-1]
+            # print(f"{patient}/Tests/{test_name}/{test_files}")
+            with open(f"{pat_dir}/Tests/{test_name}/1/{test_files}") as jsonFile:
+                jsonObject = json.load(jsonFile)
+                if "FinalScore" in jsonObject:
+                    cvlt_score = jsonObject["FinalScore"]
+                    test_dt = jsonObject["CreateDate"]
+                    test_results.append({'CVLT_fin': cvlt_score, 'TestDate': test_dt})
+                    # print(f"{test_name}-{jsonObject['FinalScore']}")
+                elif "Results" in jsonObject:
+                    if test_name == "RVP":
+                        if jsonObject["Results"]:
+                            rvp_score = sum(jsonObject['Results'])/len(jsonObject['Results'])
+                        else:
+                            rvp_score = 0
+                        # print(f"{patient}{test_name}-{jsonObject['Results']}")
+                        test_results.append({'RVP_avg':rvp_score})
+
                     else:
-                        sdmt_score = jsonObject['Result']
-                        p_id = jsonObject['Identifier']
-                        # print(f"SDMT: {sdmt_score}, {p_id}")
-                        # sdmt = {'SDMT':[sdmt_score], 'Identifier':p_id}
-                        # sdmt_df = pd.DataFrame(data=[sdmt_score], index=[p_id], columns=['SDMT'])
-                        # appendix = appendix.append({'Identifier':p_id, 'SDMT':sdmt_score}, ignore_index=True)
-                    bicams_df = bicams_df.append({'Name':name, 'Age':age, 'DateOfBirth':dob, 'Identifier':p_id, 'StudentYears':stud_yrs, 'Male':male, 'TestDate':test_dt, 'CVLT_fin':cvlt_score, 'RVP_avg':rvp_score, 'RT_avg':rt_score, 'SDMT':sdmt_score,}, ignore_index=True).drop_duplicates(subset=['Identifier'])
-                    
+                        if jsonObject["Results"]:
+                            rt_score = sum(jsonObject['Results'])/len(jsonObject['Results'])
+                        else:
+                            rt_score = 0
+                        # print(f"{test_name}-{jsonObject['Results']}")
+                        test_results.append({'RT_avg':rt_score})
+
+                elif "Result" in jsonObject:
+                    sdmt_score = jsonObject['Result']
+                    # print(f"{test_name}-{jsonObject['Result']}")
+                    test_results.append({'SDMT':sdmt_score})
+        bicams_df = bicams_df.append({'Name':name, 'Age':age, 'DateOfBirth':dob, 'Identifier':ident, 'StudentYears':stud_yrs, 'Male':male, 'TestDate':test_results[0]['TestDate'], 'CVLT_fin':test_results[0]['CVLT_fin'], 'RVP_avg':test_results[1]['RVP_avg'], 'RT_avg':test_results[2]['RT_avg'], 'SDMT':test_results[3]['SDMT'],}, ignore_index=True).drop_duplicates(subset=['Identifier'])
+        # print(test_results)
 bicams_df.to_excel('bicams.xlsx')
